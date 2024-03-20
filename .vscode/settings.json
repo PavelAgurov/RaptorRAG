@@ -1,0 +1,13 @@
+{
+    "python.analysis.extraPaths": [
+        "./backend",
+    ],
+    "python.analysis.typeCheckingMode": "off",
+
+    "files.exclude": {
+	"**/.*": true,
+	"**/__pycache__" : true,
+        ".*": true,
+        "source.code-workspace" : true,
+    }
+}
