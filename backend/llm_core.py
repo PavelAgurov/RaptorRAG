@@ -15,8 +15,11 @@ from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain.storage import LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
+from langchain_community.vectorstores.chroma import Chroma
+from langchain_core.runnables import RunnablePassthrough
 
 from backend.llm_base_core import LLMBaseCore
+from backend import prompts
 
 logger : logging.Logger = logging.getLogger()
 
@@ -25,8 +28,11 @@ class LLMCore(LLMBaseCore):
         LLM core class
     """
     
-    embedding_model : Embeddings
-    chain_summary   : any
+    __embedding_model : Embeddings
+    __chain_summary   : any
+    __vector_store    : Chroma
+    __query_prompt    : ChatPromptTemplate
+    __llm_query       : any
 
     def __init__(self, secrets : dict[str, Any]):
 
@@ -43,22 +49,21 @@ class LLMCore(LLMBaseCore):
         query_max_tokens = secrets.get('QUERY_MAX_TOKENS')
         logger.info(f"LLM query model name: {query_model_name}")
         logger.info(f"LLM query max tokens: {query_max_tokens}")
-        llm_query = self.create_llm(query_max_tokens, query_model_name)
+        self.__llm_query = self.create_llm(query_max_tokens, query_model_name)
 
         underlying_embeddings = OpenAIEmbeddings()
         cache_embeddings_storage = LocalFileStore(".cache-embeddings")
-        self.embedding_model = CacheBackedEmbeddings.from_bytes_store(
+        self.__embedding_model = CacheBackedEmbeddings.from_bytes_store(
            underlying_embeddings, cache_embeddings_storage, namespace= underlying_embeddings.model
         )
 
         # Init chains
-        summary_prompt_template = """You are an assistant to create a detailed summary of the text input prodived.
-        Text:
-        {text}
-        """
-        prompt = ChatPromptTemplate.from_template(summary_prompt_template)
-        self.chain_summary = prompt | llm_index | StrOutputParser()
+        index_prompt = ChatPromptTemplate.from_template(prompts.SUMMARY_PROMPT_TEMPLATE)
+        self.__chain_summary = index_prompt | llm_index | StrOutputParser()
         
+        self.__query_prompt = ChatPromptTemplate.from_template(prompts.QUERY_PROMPT_TEMPLATE)
+        
+        self.__vector_store = None
 
     def parse_documents(self, document_names : list[str]) -> list[str]:
         """
@@ -82,7 +87,7 @@ class LLMCore(LLMBaseCore):
         """
             Embed document
         """
-        return self.embedding_model.embed_documents([text])[0]
+        return self.__embedding_model.embed_documents([text])[0]
 
     def build_summary(self, text : str) -> str :
         """
@@ -90,12 +95,40 @@ class LLMCore(LLMBaseCore):
         """
         logger.debug("LLM build_summary")
         with get_openai_callback() as cb:
-            summary = self.chain_summary.invoke({
+            summary = self.__chain_summary.invoke({
                 "text" : text
             })
         tokens_used = cb.total_tokens
         
         return summary, tokens_used
     
+    def fill_vector_store(self, texts : list[str]) -> None:
+        """
+            Fill vector store
+        """
+        self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model)
+        self.__vector_store.persist()
 
+    def query(self, query : str, retriever_size : int = 20) -> str:
+        """
+            Query LLM
+        """
 
+        if not self.__vector_store:
+            self.__vector_store = Chroma(persist_directory=".chroma", embedding_function= self.__embedding_model)
+            
+        retriever = self.__vector_store.as_retriever(search_kwargs={"k": retriever_size})
+        
+        def format_docs_call(docs):
+            return "\n\n".join(doc.page_content for doc in docs)
+        
+        chain_query = (
+            {"context": retriever | format_docs_call, "question": RunnablePassthrough()}
+            | self.__query_prompt
+            | self.__llm_query
+            | StrOutputParser()
+        )
+        
+        json_result = chain_query.invoke(query)
+        
+        return json_result

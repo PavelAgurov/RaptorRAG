@@ -26,6 +26,8 @@ if 'display_error' not in st.session_state:
 if 'backend_core' not in st.session_state:
     all_secrets = {s[0]:s[1] for s in st.secrets.items()}
     st.session_state.backend_core = Core(all_secrets)
+if 'llm_core' not in st.session_state:
+    st.session_state.llm_core = None
 
 # ------------------------------- UI
 st.set_page_config(page_title= "Demo POC", layout="wide")
@@ -38,7 +40,6 @@ logger : logging.Logger = logging.getLogger()
 tabExtraction, tabTemplate, tabSettings = st.tabs(["Extraction", "Template", "Settings"])
 
 with tabExtraction:
-    st.warning("It's PoC, so do not upload documents with personal or sensitive information!")
     with st.form("my-form", clear_on_submit=True, border=True):
         uploaded_files = st.file_uploader(
             "Drag your documents here (docx)",
@@ -53,12 +54,20 @@ with tabExtraction:
         st.error(st.session_state.display_error)
     st.session_state.display_error = None
 
-    btnProcessDocuments = st.button("Process Documents")
+    btnBuildIndex = st.button("Build Index")
+    progress_bar = st.progress(0, "")
+
+    btnBuildAnswers = st.button("Build answers")
 
 with st.sidebar:
-    token_count_container = st.empty()
+    st.warning("""
+               It's PoC:
+               - Do not upload documents with personal or sensitive information
+               - Data is not stored on the disk and removed after session (close browser or refresh page)
+               """
+    )
+    token_count_container = st.container(border=True).empty()
 
-progress_bar = st.progress(0, "")
 
 #-------------------------------------- Functions
 
@@ -68,6 +77,7 @@ def report_progress(percent_complete : int, status_str : str):
 
 def show_used_tokens(currently_used = 0):
     """Show token counter"""
+    st.session_state.tokens += currently_used
     token_count_container.markdown(f'Used {currently_used} tokens. Total used {st.session_state.tokens} tokens.')
 
 #-------------------------------------- APP
@@ -85,17 +95,23 @@ if submitted_uploaded_files:
     st.session_state.document_contents = [d.read() for d in document_contents]
     st.rerun()
 
-if btnProcessDocuments and not st.session_state.document_contents:
+if btnBuildIndex and not st.session_state.document_contents:
     st.session_state.display_error = "Please upload documents first"
     st.rerun()
 
-if btnProcessDocuments and st.session_state.document_contents:
-    data_output = st.session_state.backend_core.run(st.session_state.document_names, st.session_state.document_contents, report_progress)
-    show_used_tokens(data_output.tokens)
+if btnBuildIndex and st.session_state.document_contents:
+    llm_core, tokens_used = st.session_state.backend_core.build_index(st.session_state.document_names, st.session_state.document_contents, report_progress)
+    show_used_tokens(tokens_used)
+    st.session_state.llm_core = llm_core
     report_progress(0, "Done")
 
-    if data_output.output:
-        df = pd.DataFrame(data_output.output, columns=['Question', 'Answer'])
+if btnBuildAnswers:
+    if not st.session_state.llm_core:
+        st.session_state.llm_core = st.session_state.backend_core.get_default_llm_core()
+    data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, report_progress)
+    show_used_tokens(tokens_used)
+    if data_output:
+        df = pd.DataFrame(data_output, columns=['Question', 'Answer'])
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.warning("No data found")

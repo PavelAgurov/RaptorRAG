@@ -11,3 +11,4 @@ unstructured[docx]
 umap-learn
 sklearn
 faiss-cpu
+chromadb

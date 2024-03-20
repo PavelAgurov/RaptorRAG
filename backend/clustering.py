@@ -36,4 +36,12 @@ def gmm_clustering(embeddings: np.ndarray, threshold: float, random_state: int =
     gm = GaussianMixture(n_components=n_clusters, random_state=random_state).fit(embeddings)
     probs = gm.predict_proba(embeddings)
     labels = [np.where(prob > threshold)[0] for prob in probs]
-    return labels, n_clusters    
+    return labels, n_clusters
+
+def gmm_clustering_list(embeddings: list, threshold: float, random_state: int = 0):
+    """
+        GMM clustering from list
+    """
+    embedded_summaries_np = np.array(embeddings)
+    return gmm_clustering(embedded_summaries_np, threshold, random_state)
+    

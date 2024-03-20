@@ -9,7 +9,6 @@ import logging
 import uuid
 import pandas as pd
 
-from backend.classes.dataoutput import DataOutput
 from backend.llm_core import LLMCore
 from backend import clustering
 
@@ -30,7 +29,13 @@ class Core:
         self.secrets = secrets
         os.makedirs(self.DOWNLOAD_FOLDER, exist_ok=True)
 
-    def run(self, document_names : list[str], document_contents : list[any], report_progress : callable) -> DataOutput:
+    def get_default_llm_core(self):
+        """
+            Return default llm core
+        """
+        return LLMCore(self.secrets)
+
+    def build_index(self, document_names : list[str], document_contents : list[any], report_progress : callable) -> tuple[LLMCore, int]:
         """
             Run processing
         """
@@ -84,12 +89,82 @@ class Core:
                 total_tokens_used += tokens_used
                 index += 1
            
-            report_progress(90, "Build output...")
-            result = DataOutput([['q1', 'a1'], ['q2', 'a2'] ], total_tokens_used)
-            return result
+            embedded_summaries = []
+            index = 0
+            summaries_length = len(summaries.values())
+            for summary in summaries.values():
+                report_progress(80, f"Embedding summary {index+1}/{summaries_length}...")
+                embedded_summaries.append(llm_core.embedding_text(summary))
+                index+= 1
+
+            report_progress(85, "Clustering summary...")
+            labels, _ = clustering.gmm_clustering_list(embedded_summaries, threshold=0.5)
+            simple_labels = [label[0] if len(label) > 0 else -1 for label in labels]           
+            clustered_summaries = {}
+            for i, label in enumerate(simple_labels):
+                if label not in clustered_summaries:
+                    clustered_summaries[label] = []
+                    clustered_summaries[label].append(list(summaries.values())[i])
+           
+            final_summaries = {}
+            index = 0
+            summaries_length = len(clustered_summaries.items())
+            for cluster, texts in clustered_summaries.items():
+                report_progress(90, f"Final summary {index+1}/{summaries_length}...")
+                combined_text = ' '.join(texts)
+                summary, tokens_used = llm_core.build_summary(combined_text)
+                total_tokens_used += tokens_used
+                final_summaries[cluster] = summary
+                index += 1
+           
+            report_progress(95, "Build vector store...")
+            texts_from_df = df['Text'].tolist()
+            texts_from_clustered_texts = list(clustered_texts.values())
+            texts_from_final_summaries = list(final_summaries.values())
+            combined_texts = texts_from_df + texts_from_clustered_texts + texts_from_final_summaries
+            llm_core.fill_vector_store(combined_texts)
+            
+            return llm_core, total_tokens_used
         finally:
             # clean up temp files
             for document_temp_name in document_temp_names:
                 os.remove(document_temp_name)
+
+
+    def query_document(self, llm_core : any, report_progress : callable) -> tuple[dict[str, any], int]:
+        """
+            Query document
+        """
+
+        question_list = [
+            "Give me full company name of provider from provided text",
+            "Give me the full title of the document",
+            "Give me name of the document",
+            "Give me a document ID number",
+            "Give me the effective date of the agreement",
+            "Give me SOW effective date",
+            "Tell me about the type of partnership or services involved",
+            "Tell me about aspects that are essential for the success of this agreement",
+            "Is Support Line 1 defined in the document?",
+            "Is Support Line 2 defined in the document?",
+            "Tell me about any support conditions defined in the document",
+            "What is responsibility of supplier for repairing or maintaining products?",
+            "Tell me about a reposibility of supplier related to a hardware components (laptop, servers etc.)?",
+            "Tell me about licensing",
+            "Tell me about Consulting services and Training for the client personnel",
+            "Tell me about Development service included in the provided text"
+        ]            
+        
+        total_tokens_used = 0
+        
+        result_output = []
+        index = 0
+        for question in question_list:
+            report_progress(99, f"Build output {index+1}/{len(question_list)}...")
+            answer = llm_core.query(question)
+            result_output.append([question, answer])
+            index += 1
+        
+        return result_output, total_tokens_used
 
 

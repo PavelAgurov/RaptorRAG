@@ -6,3 +6,4 @@
 /backend/classes/__pycache__
 /utils/__pycache__
 /.cache-embeddings
+/.chroma

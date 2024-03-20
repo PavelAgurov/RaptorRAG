@@ -47,9 +47,9 @@ def streamlit_hack_remove_top_space():
     
     st.markdown("""
         <style>
-               .css-1544g2n  {
-                    padding-top: 2rem;
-                }
+        [data-testid='stSidebarUserContent'] {
+            padding-top: 3rem;
+        }                
         </style>
         """, unsafe_allow_html=True)
 
