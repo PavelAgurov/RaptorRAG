@@ -40,7 +40,7 @@ class Core:
         for document_name, document_content in zip(document_names, document_contents):
             unique_suffix = str(uuid.uuid4().hex)
             unique_document_name = f'{self.DOWNLOAD_FOLDER}\\{document_name}_{unique_suffix}.docx'
-            logger.error(f"Store document {document_name} to {unique_document_name}")
+            logger.info(f"Store document {document_name} to {unique_document_name}")
             with open(unique_document_name, 'wb') as f:
                 f.write(document_content)
             document_temp_names.append(unique_document_name)
@@ -54,12 +54,14 @@ class Core:
             report_progress(40, "Parse documents...")
             chunks = llm_core.parse_documents(document_temp_names)
 
-            report_progress(50, "Build embeddings...")
-            global_embeddings = llm_core.embedding_texts(chunks)
+            global_embeddings = []
+            chunk_length = len(chunks)
+            for index, chunk in enumerate(chunks):
+                report_progress(50, f"Build embeddings {index+1}/{chunk_length}...")
+                global_embeddings.append(llm_core.embedding_text(chunk))
             
             report_progress(60, "Cluster embeddings...")
             global_embeddings_reduced = clustering.reduce_cluster_embeddings(global_embeddings, dim = 2)
-    
             labels, _ = clustering.gmm_clustering(global_embeddings_reduced, threshold=0.5)
             simple_labels = [label[0] if len(label) > 0 else -1 for label in labels]
             df = pd.DataFrame({
@@ -72,12 +74,15 @@ class Core:
                 cluster_texts = df[df['Cluster'] == cluster]['Text'].tolist()
                 clustered_texts[cluster] = " --- ".join(cluster_texts)
 
-            report_progress(70, "Build summarys...")
             summaries = {}
+            cluster_texts_length = len(clustered_texts.items())
+            index = 0
             for cluster, text in clustered_texts.items():
+                report_progress(70, f"Build summary for cluster {index+1}/{cluster_texts_length}...")
                 summary, tokens_used = llm_core.build_summary(text)
                 summaries[cluster] = summary
                 total_tokens_used += tokens_used
+                index += 1
            
             report_progress(90, "Build output...")
             result = DataOutput([['q1', 'a1'], ['q2', 'a2'] ], total_tokens_used)

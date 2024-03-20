@@ -10,3 +10,4 @@ langchain_text_splitters
 unstructured[docx]
 umap-learn
 sklearn
+faiss-cpu

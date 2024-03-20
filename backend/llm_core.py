@@ -13,6 +13,8 @@ from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
+from langchain.storage import LocalFileStore
+from langchain.embeddings import CacheBackedEmbeddings
 
 from backend.llm_base_core import LLMBaseCore
 
@@ -29,7 +31,7 @@ class LLMCore(LLMBaseCore):
     def __init__(self, secrets : dict[str, Any]):
 
         LLMBaseCore.__init__(self, secrets)
-
+        
         # Init LLM
         index_model_name = secrets.get('INDEX_BASE_MODEL_NAME')
         index_max_tokens = secrets.get('INDEX_MAX_TOKENS')
@@ -43,7 +45,11 @@ class LLMCore(LLMBaseCore):
         logger.info(f"LLM query max tokens: {query_max_tokens}")
         llm_query = self.create_llm(query_max_tokens, query_model_name)
 
-        self.embedding_model = OpenAIEmbeddings()
+        underlying_embeddings = OpenAIEmbeddings()
+        cache_embeddings_storage = LocalFileStore(".cache-embeddings")
+        self.embedding_model = CacheBackedEmbeddings.from_bytes_store(
+           underlying_embeddings, cache_embeddings_storage, namespace= underlying_embeddings.model
+        )
 
         # Init chains
         summary_prompt_template = """You are an assistant to create a detailed summary of the text input prodived.
@@ -72,11 +78,11 @@ class LLMCore(LLMBaseCore):
         chunks = [d.page_content for d in text_splitter.split_documents(docs)]
         return chunks
 
-    def embedding_texts(self, texts : list[str]) -> list[list[float]]:
+    def embedding_text(self, text : str) -> list[float]:
         """
-            Embed documents
+            Embed document
         """
-        return [self.embedding_model.embed_query(txt) for txt in texts]
+        return self.embedding_model.embed_documents([text])[0]
 
     def build_summary(self, text : str) -> str :
         """
