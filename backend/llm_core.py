@@ -109,7 +109,7 @@ class LLMCore(LLMBaseCore):
         self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model)
         self.__vector_store.persist()
 
-    def query(self, query : str, retriever_size : int = 20) -> str:
+    def query(self, query : str, retriever_size : int = 10) -> str:
         """
             Query LLM
         """
@@ -117,7 +117,12 @@ class LLMCore(LLMBaseCore):
         if not self.__vector_store:
             self.__vector_store = Chroma(persist_directory=".chroma", embedding_function= self.__embedding_model)
             
-        retriever = self.__vector_store.as_retriever(search_kwargs={"k": retriever_size})
+        retriever = self.__vector_store.as_retriever(
+            search_type = "similarity_score_threshold",
+            search_kwargs={
+                "k": retriever_size,
+                "score_threshold" : 0.5
+            })
         
         def format_docs_call(docs):
             return "\n\n".join(doc.page_content for doc in docs)
