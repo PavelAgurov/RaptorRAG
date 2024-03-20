@@ -8,6 +8,7 @@ import os
 import logging
 import uuid
 import pandas as pd
+import json
 
 from backend.llm_core import LLMCore
 from backend import clustering
@@ -137,33 +138,65 @@ class Core:
         """
 
         question_list = [
-            "Give me full company name of provider from provided text",
-            "Give me the full title of the document",
-            "Give me name of the document",
-            "Give me a document ID number",
-            "Give me the effective date of the agreement",
-            "Give me SOW effective date",
-            "Tell me about the type of partnership or services involved",
-            "Tell me about aspects that are essential for the success of this agreement",
-            "Is Support Line 1 defined in the document?",
-            "Is Support Line 2 defined in the document?",
-            "Tell me about any support conditions defined in the document",
-            "What is responsibility of supplier for repairing or maintaining products?",
-            "Tell me about a reposibility of supplier related to a hardware components (laptop, servers etc.)?",
-            "Tell me about licensing",
-            "Tell me about Consulting services and Training for the client personnel",
-            "Tell me about Development service included in the provided text"
+            "A:Give me full company name of provider from provided text",
+            "B:Give me the full title of the document",
+            "C:Give me name of the document",
+            "D:Give me a document ID number",
+            "E:Give me the effective date of the agreement",
+            "F:Give me SOW effective date",
+            "G:Tell me about the type of partnership or services involved",
+            "AA:Tell me about aspects that are essential for the success of this agreement",
+            "AB:Is Support Line 1 defined in the document?",
+            "AC:Is Support Line 2 defined in the document?",
+            "AD:Tell me about any support conditions defined in the document",
+            "AE:What is responsibility of supplier for repairing or maintaining products?",
+            "AF:Tell me about a reposibility of supplier related to a hardware components (laptop, servers etc.)?",
+            "BA:Tell me about licensing",
+            "BB:Tell me about Consulting services and Training for the client personnel",
+            "BC:Tell me about Development service included in the provided text"
         ]            
+
+        report_progress(1, "Start query...")
         
         total_tokens_used = 0
         
         result_output = []
         index = 0
-        for question in question_list:
-            report_progress(99, f"Build output {index+1}/{len(question_list)}...")
-            answer = llm_core.query(question)
-            result_output.append([question, answer])
+        for question_str in question_list:
+            report_progress(index+2, f"Build output {index+1}/{len(question_list)}...")
+            
+            question_parsed = question_str.split(":")
+            if len(question_parsed)!= 2:
+                result_output.append(["Error", question_str, "", -1])
+                index+= 1
+                continue
+            
+            question_code  = question_parsed[0].strip()
+            question_query = question_parsed[1].strip()
+
+            answer_text = ""
+            answer_score = 0
+            answer_llm = ""
+            try:
+                answer_llm, tokens_used = llm_core.query(question_query)
+                total_tokens_used += tokens_used
+            except: # pylint: disable=W0718,W0702
+                answer_text = "Error: LLM query failed"
+                answer_score = -1
+            
+            if answer_score != -1:
+                try:
+                    answer_json = json.loads(answer_llm)
+                    answer_text = answer_json['answer']
+                    answer_score = answer_json['score']
+                except: # pylint: disable=W0718,W0702
+                    answer_text = "Error parsing answer"
+                    answer_score = -1
+            
+            result_output.append([question_code, question_query, answer_text, answer_score])
             index += 1
+        
+        report_progress(0, "Done")
         
         return result_output, total_tokens_used
 

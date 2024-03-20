@@ -33,6 +33,9 @@ class LLMCore(LLMBaseCore):
     __vector_store    : Chroma
     __query_prompt    : ChatPromptTemplate
     __llm_query       : any
+    __retriever_size  : int
+    __chunk_size      : int
+    __chunk_offset    : int
 
     def __init__(self, secrets : dict[str, Any]):
 
@@ -56,6 +59,10 @@ class LLMCore(LLMBaseCore):
         self.__embedding_model = CacheBackedEmbeddings.from_bytes_store(
            underlying_embeddings, cache_embeddings_storage, namespace= underlying_embeddings.model
         )
+        
+        self.__retriever_size = secrets.get('RETRIEVER_SIZE', 10)
+        self.__chunk_size     = secrets.get('CHUNK_SIZE', 200)
+        self.__chunk_offset   = secrets.get('CHUNK_OFFSET', 0)
 
         # Init chains
         index_prompt = ChatPromptTemplate.from_template(prompts.SUMMARY_PROMPT_TEMPLATE)
@@ -74,9 +81,9 @@ class LLMCore(LLMBaseCore):
         docs = loader.load()
         
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=200,
-            chunk_overlap=20,
-            length_function=len,
+            chunk_size      = self.__chunk_size,
+            chunk_overlap   = self.__chunk_offset,
+            length_function = len,
             is_separator_regex=False,
         )
 
@@ -109,7 +116,7 @@ class LLMCore(LLMBaseCore):
         self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model)
         self.__vector_store.persist()
 
-    def query(self, query : str, retriever_size : int = 10) -> str:
+    def query(self, query : str) -> tuple[str, int]:
         """
             Query LLM
         """
@@ -120,7 +127,7 @@ class LLMCore(LLMBaseCore):
         retriever = self.__vector_store.as_retriever(
             search_type = "similarity_score_threshold",
             search_kwargs={
-                "k": retriever_size,
+                "k": self.__retriever_size,
                 "score_threshold" : 0.5
             })
         
@@ -134,6 +141,8 @@ class LLMCore(LLMBaseCore):
             | StrOutputParser()
         )
         
-        json_result = chain_query.invoke(query)
+        with get_openai_callback() as cb:
+            json_result = chain_query.invoke(query)
+        tokens_used = cb.total_tokens
         
-        return json_result
+        return json_result, tokens_used

@@ -111,7 +111,7 @@ if btnBuildAnswers:
     data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, report_progress)
     show_used_tokens(tokens_used)
     if data_output:
-        df = pd.DataFrame(data_output, columns=['Question', 'Answer'])
+        df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score"])
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.warning("No data found")
