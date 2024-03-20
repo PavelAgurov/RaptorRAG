@@ -11,6 +11,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.callbacks import get_openai_callback
 from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.embeddings import Embeddings
+from langchain_openai import OpenAIEmbeddings
 
 from backend.llm_base_core import LLMBaseCore
 
@@ -21,7 +23,8 @@ class LLMCore(LLMBaseCore):
         LLM core class
     """
     
-    chain : any
+    embedding_model : Embeddings
+    chain_summary   : any
 
     def __init__(self, secrets : dict[str, Any]):
 
@@ -40,9 +43,16 @@ class LLMCore(LLMBaseCore):
         logger.info(f"LLM query max tokens: {query_max_tokens}")
         llm_query = self.create_llm(query_max_tokens, query_model_name)
 
+        self.embedding_model = OpenAIEmbeddings()
+
         # Init chains
-        base_prompt = ChatPromptTemplate.from_template("You are helpful assistant to answer question '{question}'.")
-        self.chain_index  = base_prompt | llm_index | StrOutputParser()
+        summary_prompt_template = """You are an assistant to create a detailed summary of the text input prodived.
+        Text:
+        {text}
+        """
+        prompt = ChatPromptTemplate.from_template(summary_prompt_template)
+        self.chain_summary = prompt | llm_index | StrOutputParser()
+        
 
     def parse_documents(self, document_names : list[str]) -> list[str]:
         """
@@ -62,18 +72,24 @@ class LLMCore(LLMBaseCore):
         chunks = [d.page_content for d in text_splitter.split_documents(docs)]
         return chunks
 
-    def test_chat(self, query : str) -> str :
+    def embedding_texts(self, texts : list[str]) -> list[list[float]]:
         """
-            Run LLM
+            Embed documents
         """
-        logger.debug(f"LLM input: {query}")
+        return [self.embedding_model.embed_query(txt) for txt in texts]
+
+    def build_summary(self, text : str) -> str :
+        """
+            Run LLM for summarization
+        """
+        logger.debug("LLM build_summary")
         with get_openai_callback() as cb:
-            answer = self.chain.invoke({
-                "question" : query
+            summary = self.chain_summary.invoke({
+                "text" : text
             })
         tokens_used = cb.total_tokens
         
-        return answer, tokens_used
+        return summary, tokens_used
     
 
 

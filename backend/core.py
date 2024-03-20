@@ -7,9 +7,11 @@
 import os
 import logging
 import uuid
+import pandas as pd
 
 from backend.classes.dataoutput import DataOutput
 from backend.llm_core import LLMCore
+from backend import clustering
 
 logger : logging.Logger = logging.getLogger()
 
@@ -44,18 +46,45 @@ class Core:
             document_temp_names.append(unique_document_name)
         report_progress(20, f"Stored {len(document_temp_names)} documents")
         
+        total_tokens_used = 0
         try:
             report_progress(30, "Create LLM...")
             llm_core = LLMCore(self.secrets)
             
             report_progress(40, "Parse documents...")
             chunks = llm_core.parse_documents(document_temp_names)
-            report_progress(50, f"Extracted {len(chunks)} chunks")
+
+            report_progress(50, "Build embeddings...")
+            global_embeddings = llm_core.embedding_texts(chunks)
             
+            report_progress(60, "Cluster embeddings...")
+            global_embeddings_reduced = clustering.reduce_cluster_embeddings(global_embeddings, dim = 2)
+    
+            labels, _ = clustering.gmm_clustering(global_embeddings_reduced, threshold=0.5)
+            simple_labels = [label[0] if len(label) > 0 else -1 for label in labels]
+            df = pd.DataFrame({
+                'Text': chunks,
+                'Embedding': list(global_embeddings_reduced),
+                'Cluster': simple_labels
+            })
+            clustered_texts = {}
+            for cluster in df['Cluster'].unique():
+                cluster_texts = df[df['Cluster'] == cluster]['Text'].tolist()
+                clustered_texts[cluster] = " --- ".join(cluster_texts)
+
+            report_progress(70, "Build summarys...")
+            summaries = {}
+            for cluster, text in clustered_texts.items():
+                summary, tokens_used = llm_core.build_summary(text)
+                summaries[cluster] = summary
+                total_tokens_used += tokens_used
+           
             report_progress(90, "Build output...")
-            result = DataOutput([['q1', 'a1'], ['q2', 'a2'] ], 100)
+            result = DataOutput([['q1', 'a1'], ['q2', 'a2'] ], total_tokens_used)
             return result
         finally:
             # clean up temp files
             for document_temp_name in document_temp_names:
                 os.remove(document_temp_name)
+
+

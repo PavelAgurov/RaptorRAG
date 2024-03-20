@@ -99,7 +99,3 @@ if btnProcessDocuments and st.session_state.document_contents:
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.warning("No data found")
-
-
-
-
