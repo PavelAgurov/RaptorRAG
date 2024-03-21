@@ -12,3 +12,4 @@ umap-learn
 sklearn
 faiss-cpu
 chromadb
+openpyxl

@@ -6,6 +6,7 @@
 import pandas as pd
 import streamlit as st
 import logging
+from io import BytesIO
 
 from utils_streamlit import streamlit_hack_remove_top_space
 from utils.app_logger import init_streamlit_logger
@@ -33,6 +34,15 @@ if 'result_df' not in st.session_state:
     st.session_state.result_df = None
 if 'question_list' not in st.session_state:
     st.session_state.question_list = DEFAULT_QUESTION_LIST
+
+
+# ------------------------------- Download function
+def download_excel(df_excel : pd.DataFrame):
+    """Download dataframe as excel"""
+    local_excel_buffer = BytesIO()
+    df_excel.to_excel(local_excel_buffer, index=False, header=False)
+    local_excel_buffer.seek(0)
+    return local_excel_buffer
 
 # ------------------------------- UI
 st.set_page_config(page_title= "Demo POC", layout="wide")
@@ -66,7 +76,13 @@ with tabExtraction:
     
     if st.session_state.result_df is not None:
         st.dataframe(st.session_state.result_df, use_container_width=True, hide_index=True)
-
+        if st.button('Prepare downloading as Excel'):
+            with st.spinner('Downloading...'):
+                df = pd.DataFrame(st.session_state.result_df, columns=['Question', 'Answer']).T
+                excel_buffer = download_excel(df)
+                st.download_button(label='Download Excel', data=excel_buffer, file_name='dataframe.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            
+            
 with tabSettings:
     question_list = st.text_area("Enter questions (one per line)", value = '\n'.join(st.session_state.question_list), height=400)
 
