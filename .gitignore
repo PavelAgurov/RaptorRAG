@@ -7,3 +7,4 @@
 /utils/__pycache__
 /.cache-embeddings
 /.chroma
+/data/__pycache__

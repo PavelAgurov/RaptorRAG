@@ -132,38 +132,20 @@ class Core:
                 os.remove(document_temp_name)
 
 
-    def query_document(self, llm_core : any, report_progress : callable) -> tuple[dict[str, any], int]:
+    def query_document(self, llm_core : any, question_list : list[str], report_progress : callable) -> tuple[dict[str, any], int]:
         """
             Query document
         """
 
-        question_list = [
-            "A:Give me full company name of provider from provided text",
-            "B:Give me the full title of the document",
-            "C:Give me name of the document",
-            "D:Give me a document ID number",
-            "E:Give me the effective date of the agreement",
-            "F:Give me SOW effective date",
-            "G:Tell me about the type of partnership or services involved",
-            "AA:Tell me about aspects that are essential for the success of this agreement",
-            "AB:Is Support Line 1 defined in the document?",
-            "AC:Is Support Line 2 defined in the document?",
-            "AD:Tell me about any support conditions defined in the document",
-            "AE:What is responsibility of supplier for repairing or maintaining products?",
-            "AF:Tell me about a reposibility of supplier related to a hardware components (laptop, servers etc.)?",
-            "BA:Tell me about licensing",
-            "BB:Tell me about Consulting services and Training for the client personnel",
-            "BC:Tell me about Development service included in the provided text"
-        ]            
-
-        report_progress(1, "Start query...")
+        report_progress(0.0, "Start query...")
         
         total_tokens_used = 0
         
-        result_output = []
+        result_output   = []
+        result_answered = {}
         index = 0
         for question_str in question_list:
-            report_progress(index+2, f"Build output {index+1}/{len(question_list)}...")
+            report_progress(float(index+1) / len(question_list), f"Build output {index+1}/{len(question_list)}...")
             
             question_parsed = question_str.split(":")
             if len(question_parsed)!= 2:
@@ -173,6 +155,11 @@ class Core:
             
             question_code  = question_parsed[0].strip()
             question_query = question_parsed[1].strip()
+            
+            # we alredy have answer for this column
+            if result_answered.get(question_code, False):
+                index += 1
+                continue
 
             answer_text = ""
             answer_score = 0
@@ -189,6 +176,7 @@ class Core:
                     answer_json = json.loads(answer_llm)
                     answer_text = answer_json['answer']
                     answer_score = answer_json['score']
+                    result_answered[question_code] = True
                 except: # pylint: disable=W0718,W0702
                     answer_text = "Error parsing answer"
                     answer_score = -1
@@ -196,7 +184,7 @@ class Core:
             result_output.append([question_code, question_query, answer_text, answer_score])
             index += 1
         
-        report_progress(0, "Done")
+        report_progress(0.0, "Done")
         
         return result_output, total_tokens_used
 

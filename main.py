@@ -11,6 +11,7 @@ from utils_streamlit import streamlit_hack_remove_top_space
 from utils.app_logger import init_streamlit_logger
 
 from backend.core import Core
+from data.question_list import DEFAULT_QUESTION_LIST
 
 init_streamlit_logger()
 
@@ -28,6 +29,10 @@ if 'backend_core' not in st.session_state:
     st.session_state.backend_core = Core(all_secrets)
 if 'llm_core' not in st.session_state:
     st.session_state.llm_core = None
+if 'result_df' not in st.session_state:
+    st.session_state.result_df = None
+if 'question_list' not in st.session_state:
+    st.session_state.question_list = DEFAULT_QUESTION_LIST
 
 # ------------------------------- UI
 st.set_page_config(page_title= "Demo POC", layout="wide")
@@ -58,6 +63,12 @@ with tabExtraction:
     progress_bar = st.progress(0, "")
 
     btnBuildAnswers = st.button("Build answers")
+    
+    if st.session_state.result_df is not None:
+        st.dataframe(st.session_state.result_df, use_container_width=True, hide_index=True)
+
+with tabSettings:
+    question_list = st.text_area("Enter questions (one per line)", value = '\n'.join(st.session_state.question_list), height=400)
 
 with st.sidebar:
     st.warning("""
@@ -84,6 +95,9 @@ def show_used_tokens(currently_used = 0):
 
 show_used_tokens(0)
 
+if question_list:
+    st.session_state.question_list = question_list.split("\n")
+
 # upload file
 if submitted_uploaded_files:
     document_names   = []
@@ -93,6 +107,8 @@ if submitted_uploaded_files:
         document_contents.append(uploaded_file)
     st.session_state.document_names    = document_names
     st.session_state.document_contents = [d.read() for d in document_contents]
+    st.session_state.result_df = None
+    st.session_state.llm_core  = None
     st.rerun()
 
 if btnBuildIndex and not st.session_state.document_contents:
@@ -102,16 +118,17 @@ if btnBuildIndex and not st.session_state.document_contents:
 if btnBuildIndex and st.session_state.document_contents:
     llm_core, tokens_used = st.session_state.backend_core.build_index(st.session_state.document_names, st.session_state.document_contents, report_progress)
     show_used_tokens(tokens_used)
-    st.session_state.llm_core = llm_core
+    st.session_state.llm_core  = llm_core
+    st.session_state.result_df = None
     report_progress(0, "Done")
 
 if btnBuildAnswers:
     if not st.session_state.llm_core:
         st.session_state.llm_core = st.session_state.backend_core.get_default_llm_core()
-    data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, report_progress)
+    data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, st.session_state.question_list, report_progress)
     show_used_tokens(tokens_used)
     if data_output:
-        df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score"])
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.session_state.result_df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score"])
     else:
-        st.warning("No data found")
+        st.session_state.display_error = "No data found"
+    st.rerun()
