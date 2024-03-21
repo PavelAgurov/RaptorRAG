@@ -8,3 +8,4 @@
 /.cache-embeddings
 /.chroma
 /data/__pycache__
+/export/__pycache__
