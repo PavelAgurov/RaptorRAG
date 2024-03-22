@@ -9,12 +9,21 @@ import logging
 import uuid
 import pandas as pd
 import json
+from enum import Enum
 
 from backend.llm_core import LLMCore
 from backend import clustering
 
 logger : logging.Logger = logging.getLogger()
 
+
+class OperationMode(Enum):
+    """Mode of query processing"""
+    NONE    = 0
+    COMBINE = 1
+    def __str__(self):
+        return str(self.name)
+    
 class Core:
     """
         Backe-end core class
@@ -132,7 +141,7 @@ class Core:
                 os.remove(document_temp_name)
 
 
-    def query_document(self, llm_core : any, question_list : list[str], report_progress : callable) -> tuple[dict[str, any], int]:
+    def query_document(self, llm_core : any, query_list : list[str], report_progress : callable) -> tuple[dict[str, any], int]:
         """
             Query document
         """
@@ -144,20 +153,34 @@ class Core:
         result_output   = []
         result_answered = {}
         index = 0
-        for question_str in question_list:
-            report_progress(float(index+1) / len(question_list), f"Build output {index+1}/{len(question_list)}...")
+        for query_str in query_list:
+            report_progress(float(index+1) / len(query_list), f"Build output {index+1}/{len(query_list)}...")
             
-            question_parsed = question_str.split(":")
-            if len(question_parsed)!= 2:
-                result_output.append(["Error", question_str, "", -1])
+            query_str = query_str.strip()
+            if len(query_str) == 0: # skip empty strings
+                index+= 1
+                continue
+
+            if query_str.startswith('#'): # skip comments
                 index+= 1
                 continue
             
-            question_code  = question_parsed[0].strip()
-            question_query = question_parsed[1].strip()
+            query_parsed = query_str.split(":")
+            if len(query_parsed)!= 2:
+                result_output.append(["Error", query_str, "", -1, None])
+                index+= 1
+                continue
+            
+            query_code  = query_parsed[0].strip()
+            query_query = query_parsed[1].strip()
+            
+            operation_mode = OperationMode.NONE
+            if query_code.endswith("+"):
+                operation_mode = OperationMode.COMBINE
+                query_code = query_code[:-1]
             
             # we alredy have answer for this column
-            if result_answered.get(question_code, False):
+            if result_answered.get(query_code, False) and operation_mode != OperationMode.COMBINE:
                 index += 1
                 continue
 
@@ -165,7 +188,7 @@ class Core:
             answer_score = 0
             answer_llm = ""
             try:
-                answer_llm, tokens_used = llm_core.query(question_query)
+                answer_llm, tokens_used = llm_core.query(query_query)
                 total_tokens_used += tokens_used
             except: # pylint: disable=W0718,W0702
                 answer_text = "Error: LLM query failed"
@@ -176,12 +199,12 @@ class Core:
                     answer_json = json.loads(answer_llm)
                     answer_text = answer_json['answer']
                     answer_score = answer_json['score']
-                    result_answered[question_code] = True
+                    result_answered[query_code] = True
                 except: # pylint: disable=W0718,W0702
                     answer_text = "Error parsing answer"
                     answer_score = -1
             
-            result_output.append([question_code, question_query, answer_text, answer_score])
+            result_output.append([query_code, query_query, answer_text, answer_score, operation_mode])
             index += 1
         
         report_progress(0.0, "Done")

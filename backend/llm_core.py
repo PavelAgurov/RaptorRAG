@@ -17,6 +17,7 @@ from langchain.storage import LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.runnables import RunnablePassthrough
+from langchain_text_splitters import TokenTextSplitter
 
 from backend.llm_base_core import LLMBaseCore
 from backend import prompts
@@ -28,14 +29,16 @@ class LLMCore(LLMBaseCore):
         LLM core class
     """
     
-    __embedding_model : Embeddings
-    __chain_summary   : any
-    __vector_store    : Chroma
-    __query_prompt    : ChatPromptTemplate
-    __llm_query       : any
-    __retriever_size  : int
-    __chunk_size      : int
-    __chunk_offset    : int
+    __index_max_tokens : int
+    __query_max_tokens : int
+    __embedding_model  : Embeddings
+    __chain_summary    : any
+    __vector_store     : Chroma
+    __query_prompt     : ChatPromptTemplate
+    __llm_query        : any
+    __retriever_size   : int
+    __chunk_size       : int
+    __chunk_offset     : int
 
     def __init__(self, secrets : dict[str, Any]):
 
@@ -43,16 +46,16 @@ class LLMCore(LLMBaseCore):
         
         # Init LLM
         index_model_name = secrets.get('INDEX_BASE_MODEL_NAME')
-        index_max_tokens = secrets.get('INDEX_MAX_TOKENS')
+        self.__index_max_tokens = secrets.get('INDEX_MAX_TOKENS')
         logger.info(f"LLM index model name: {index_model_name}")
-        logger.info(f"LLM index max tokens: {index_max_tokens}")
-        llm_index = self.create_llm(index_max_tokens, index_model_name)
+        logger.info(f"LLM index max tokens: {self.__index_max_tokens}")
+        llm_index = self.create_llm(self.__index_max_tokens, index_model_name)
 
         query_model_name = secrets.get('QUERY_BASE_MODEL_NAME')
-        query_max_tokens = secrets.get('QUERY_MAX_TOKENS')
+        self.__query_max_tokens = secrets.get('QUERY_MAX_TOKENS')
         logger.info(f"LLM query model name: {query_model_name}")
-        logger.info(f"LLM query max tokens: {query_max_tokens}")
-        self.__llm_query = self.create_llm(query_max_tokens, query_model_name)
+        logger.info(f"LLM query max tokens: {self.__query_max_tokens}")
+        self.__llm_query = self.create_llm(self.__query_max_tokens, query_model_name)
 
         underlying_embeddings = OpenAIEmbeddings()
         cache_embeddings_storage = LocalFileStore(".cache-embeddings")
@@ -101,13 +104,21 @@ class LLMCore(LLMBaseCore):
             Run LLM for summarization
         """
         logger.debug("LLM build_summary")
-        with get_openai_callback() as cb:
-            summary = self.__chain_summary.invoke({
-                "text" : text
-            })
-        tokens_used = cb.total_tokens
         
-        return summary, tokens_used
+        text_splitter = TokenTextSplitter(chunk_size= self.__index_max_tokens, chunk_overlap=0)
+        texts = text_splitter.split_text(text)
+        
+        total_tokens  = 0
+        total_summary = []
+        for text in texts:
+            with get_openai_callback() as cb:
+                summary = self.__chain_summary.invoke({
+                    "text" : text
+                })
+            total_tokens += cb.total_tokens
+            total_summary.append(summary)
+        
+        return '\n'.join(total_summary), total_tokens
     
     def fill_vector_store(self, texts : list[str]) -> None:
         """

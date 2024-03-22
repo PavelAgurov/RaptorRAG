@@ -11,8 +11,9 @@ from utils_streamlit import streamlit_hack_remove_top_space
 from utils.app_logger import init_streamlit_logger
 
 from backend.core import Core
-from data.question_list import DEFAULT_QUESTION_LIST
+from data.query_list import DEFAULT_QUERY_LIST
 from export import excel_ouput
+import strings
 
 init_streamlit_logger()
 
@@ -32,8 +33,8 @@ if 'llm_core' not in st.session_state:
     st.session_state.llm_core = None
 if 'result_df' not in st.session_state:
     st.session_state.result_df = None
-if 'question_list' not in st.session_state:
-    st.session_state.question_list = DEFAULT_QUESTION_LIST
+if 'query_list' not in st.session_state:
+    st.session_state.query_list = DEFAULT_QUERY_LIST
 
 # ------------------------------- UI
 st.set_page_config(page_title= "Demo POC", layout="wide")
@@ -77,15 +78,11 @@ with tabExtraction:
                     mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             
 with tabSettings:
-    question_list = st.text_area("Enter questions (one per line)", value = '\n'.join(st.session_state.question_list), height=400)
+    st.expander(label="Query format description").info(strings.QUERY_EXPLANATION)
+    query_list = st.text_area("Queries (one per line):", value = '\n'.join(st.session_state.query_list), height=400)
 
 with st.sidebar:
-    st.warning("""
-               It's PoC:
-               - Do not upload documents with personal or sensitive information
-               - Data is not stored on the disk and removed after session (close browser or refresh page)
-               """
-    )
+    st.warning(strings.DISCLAIMER)
     token_count_container = st.container(border=True).empty()
 
 
@@ -104,8 +101,8 @@ def show_used_tokens(currently_used = 0):
 
 show_used_tokens(0)
 
-if question_list:
-    st.session_state.question_list = question_list.split("\n")
+if query_list:
+    st.session_state.query_list = query_list.split("\n")
 
 # upload file
 if submitted_uploaded_files:
@@ -134,10 +131,10 @@ if btnBuildIndex and st.session_state.document_contents:
 if btnBuildAnswers:
     if not st.session_state.llm_core:
         st.session_state.llm_core = st.session_state.backend_core.get_default_llm_core()
-    data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, st.session_state.question_list, report_progress)
+    data_output, tokens_used = st.session_state.backend_core.query_document(st.session_state.llm_core, st.session_state.query_list, report_progress)
     show_used_tokens(tokens_used)
     if data_output:
-        st.session_state.result_df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score"])
+        st.session_state.result_df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score", "Mode"])
     else:
         st.session_state.display_error = "No data found"
     st.rerun()

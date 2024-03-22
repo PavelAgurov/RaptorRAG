@@ -33,7 +33,12 @@ def fill_template(df: pd.DataFrame, template_file_path: str = DEFAULT_TEMPLATE) 
     for _, row in df.iterrows():
         column_name = row['Column']
         column_address = f'{column_name}{output_row_index}'
-        sheet[column_address] = row['Answer']
+        
+        current_value = str(sheet[column_address].value or '')
+        if current_value:
+            current_value += "\n"
+        sheet[column_address] = current_value + row['Answer']
+        
         sheet[column_address].alignment = Alignment(wrap_text=True, vertical='top')
         
     # auto size
