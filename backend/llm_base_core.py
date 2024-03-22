@@ -31,7 +31,7 @@ class LLMBaseCore:
 
         # Init cache
         os.makedirs(".langchain-cache", exist_ok=True)
-        set_llm_cache(SQLiteCache(database_path=".langchain-cache\.langchain.db"))
+        set_llm_cache(SQLiteCache(database_path=".langchain-cache\\.langchain.db"))
 
         # init env
         self.init_llm_environment(secrets)

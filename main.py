@@ -67,7 +67,11 @@ with tabExtraction:
     btnBuildAnswers = st.button("Build answers", key="btnBuildAnswers")
     
     if st.session_state.result_df is not None:
-        st.dataframe(st.session_state.result_df, use_container_width=True, hide_index=True)
+        # show data
+        display_df = pd.DataFrame(st.session_state.result_df)
+        display_df = display_df.drop('Mode', axis=1)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
         if st.button('Prepare downloading as Excel'):
             with st.spinner('Downloading...'):
                 excel_buffer = excel_ouput.fill_template(st.session_state.result_df)
