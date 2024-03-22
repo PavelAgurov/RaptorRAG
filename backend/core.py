@@ -30,14 +30,15 @@ class Core:
     """
     secrets : dict[str, any] = None
     
-    DOWNLOAD_FOLDER = ".downloads"
+    __DOWNLOAD_FOLDER = ".downloads"
+    __DOCUMENT_INDEX_COLLECTION = "document_index"
     
     def __init__(self, secrets : dict[str, any]):
         """
             Constuctur
         """
         self.secrets = secrets
-        os.makedirs(self.DOWNLOAD_FOLDER, exist_ok=True)
+        os.makedirs(self.__DOWNLOAD_FOLDER, exist_ok=True)
 
     def get_default_llm_core(self):
         """
@@ -54,7 +55,7 @@ class Core:
         document_temp_names = []
         for document_name, document_content in zip(document_names, document_contents):
             unique_suffix = str(uuid.uuid4().hex)
-            unique_document_name = f'{self.DOWNLOAD_FOLDER}\\{document_name}_{unique_suffix}.docx'
+            unique_document_name = f'{self.__DOWNLOAD_FOLDER}\\{document_name}_{unique_suffix}.docx'
             logger.info(f"Store document {document_name} to {unique_document_name}")
             with open(unique_document_name, 'wb') as f:
                 f.write(document_content)
@@ -132,7 +133,9 @@ class Core:
             texts_from_clustered_texts = list(clustered_texts.values())
             texts_from_final_summaries = list(final_summaries.values())
             combined_texts = texts_from_df + texts_from_clustered_texts + texts_from_final_summaries
-            llm_core.fill_vector_store(combined_texts)
+            
+            # fill vector store with all texts
+            llm_core.fill_vector_store(combined_texts, self.__DOCUMENT_INDEX_COLLECTION)
             
             return llm_core, total_tokens_used
         finally:
@@ -141,7 +144,7 @@ class Core:
                 os.remove(document_temp_name)
 
 
-    def query_document(self, llm_core : any, query_list : list[str], report_progress : callable) -> tuple[dict[str, any], int]:
+    def query_document(self, llm_core : LLMCore, query_list : list[str], report_progress : callable) -> tuple[dict[str, any], int]:
         """
             Query document
         """
@@ -188,7 +191,7 @@ class Core:
             answer_score = 0
             answer_llm = ""
             try:
-                answer_llm, tokens_used = llm_core.query(query_query)
+                answer_llm, tokens_used = llm_core.query(query_query, self.__DOCUMENT_INDEX_COLLECTION)
                 total_tokens_used += tokens_used
             except: # pylint: disable=W0718,W0702
                 answer_text = "Error: LLM query failed"

@@ -61,10 +61,10 @@ with tabExtraction:
         st.error(st.session_state.display_error)
     st.session_state.display_error = None
 
-    btnBuildIndex = st.button("Build Index")
+    btnBuildIndex = st.button("Build Index", key="btnBuildIndex")
     progress_bar = st.progress(0, "")
 
-    btnBuildAnswers = st.button("Build answers")
+    btnBuildAnswers = st.button("Build answers", key="btnBuildAnswers")
     
     if st.session_state.result_df is not None:
         st.dataframe(st.session_state.result_df, use_container_width=True, hide_index=True)

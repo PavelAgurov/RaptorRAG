@@ -120,20 +120,20 @@ class LLMCore(LLMBaseCore):
         
         return '\n'.join(total_summary), total_tokens
     
-    def fill_vector_store(self, texts : list[str]) -> None:
+    def fill_vector_store(self, texts : list[str], collection_name : str) -> None:
         """
             Fill vector store
         """
-        self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model)
+        self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model, collection_name= collection_name)
         self.__vector_store.persist()
 
-    def query(self, query : str) -> tuple[str, int]:
+    def query(self, query : str, collection_name : str) -> tuple[str, int]:
         """
             Query LLM
         """
 
         if not self.__vector_store:
-            self.__vector_store = Chroma(persist_directory=".chroma", embedding_function= self.__embedding_model)
+            self.__vector_store = Chroma(persist_directory=".chroma", embedding_function= self.__embedding_model, collection_name= collection_name)
             
         retriever = self.__vector_store.as_retriever(
             search_type = "similarity_score_threshold",
