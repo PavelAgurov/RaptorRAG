@@ -35,6 +35,8 @@ if 'result_df' not in st.session_state:
     st.session_state.result_df = None
 if 'query_list' not in st.session_state:
     st.session_state.query_list = DEFAULT_QUERY_LIST
+if 'single_query_ouput' not in st.session_state:
+    st.session_state.single_query_ouput = None
 
 # ------------------------------- UI
 st.set_page_config(page_title= "Demo POC", layout="wide")
@@ -64,22 +66,31 @@ with tabExtraction:
     btnBuildIndex = st.button("Build Index", key="btnBuildIndex")
     progress_bar = st.progress(0, "")
 
-    btnBuildAnswers = st.button("Build answers", key="btnBuildAnswers")
-    
-    if st.session_state.result_df is not None:
-        # show data
-        display_df = pd.DataFrame(st.session_state.result_df)
-        display_df = display_df.drop('Mode', axis=1)
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    tabBulkQuery, tabSingleQuery = st.tabs(["Bulk Query", "Single Query"])
+
+    with tabBulkQuery:
+        btnBuildAnswers = st.button("Build answers (based on query list)", key="btnBuildAnswers")
         
-        if st.button('Prepare downloading as Excel'):
-            with st.spinner('Downloading...'):
-                excel_buffer = excel_ouput.fill_template(st.session_state.result_df)
-                st.download_button(
-                    label='Download Excel', 
-                    data=excel_buffer, 
-                    file_name='Contract Overview.xlsx', 
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        if st.session_state.result_df is not None:
+            # show data
+            display_df = pd.DataFrame(st.session_state.result_df)
+            display_df = display_df.drop('Mode', axis=1)
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            if st.button('Prepare downloading as Excel'):
+                with st.spinner('Downloading...'):
+                    excel_buffer = excel_ouput.fill_template(st.session_state.result_df)
+                    st.download_button(
+                        label='Download Excel', 
+                        data=excel_buffer, 
+                        file_name='Contract Overview.xlsx', 
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    with tabSingleQuery:
+        txtSinglQuery = st.text_input("Enter query:")
+        btnSingleQuery = st.button("Search")
+        if st.session_state.single_query_ouput:
+            st.write(st.session_state.single_query_ouput)
             
 with tabSettings:
     st.expander(label="Query format description").info(strings.QUERY_EXPLANATION)
@@ -87,8 +98,9 @@ with tabSettings:
 
 with st.sidebar:
     st.warning(strings.DISCLAIMER)
+    if st.session_state.backend_core.is_raptor_disabled():
+        st.warning("RAPTOR extraction disabled!", icon="⚠️")
     token_count_container = st.container(border=True).empty()
-
 
 #-------------------------------------- Functions
 
@@ -140,5 +152,23 @@ if btnBuildAnswers:
     if data_output:
         st.session_state.result_df = pd.DataFrame(data_output, columns=['Column', 'Question', 'Answer', "Score", "Mode"])
     else:
+        st.session_state.result_df = None
         st.session_state.display_error = "No data found"
     st.rerun()
+    
+if btnSingleQuery:
+    if not txtSinglQuery:
+        st.session_state.display_error = "Enter query text"
+        st.rerun()
+        
+    if not st.session_state.llm_core:
+        st.session_state.llm_core = st.session_state.backend_core.get_default_llm_core()
+    single_output, tokens_used = st.session_state.backend_core.single_query(st.session_state.llm_core, txtSinglQuery)
+    show_used_tokens(tokens_used)
+    if single_output:
+        st.session_state.single_query_ouput = single_output
+    else:
+        st.session_state.single_query_ouput = ""
+        st.session_state.display_error = "No data found"
+    st.rerun()
+        

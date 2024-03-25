@@ -10,3 +10,7 @@
 /data/__pycache__
 /export/__pycache__
 /.langchain-cache/.langchain.db
+/.chunks
+/.downloads
+/.clusters
+/.summary

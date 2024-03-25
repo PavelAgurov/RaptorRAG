@@ -6,6 +6,7 @@
 
 DEFAULT_QUERY_LIST = [
     "D: Give me full company name of provider from provided text",
+    "D+: Give me company names involved into provided agreement",
     
     "E: Give me the full title of the document",
     "E: Give me name of the document",

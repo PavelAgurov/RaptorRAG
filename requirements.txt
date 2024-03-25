@@ -9,7 +9,7 @@ langchain_community
 langchain_text_splitters
 unstructured[docx]
 umap-learn
-sklearn
+scikit-learn
 faiss-cpu
 chromadb
 openpyxl

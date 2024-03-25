@@ -9,6 +9,9 @@ import os
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain.globals import set_llm_cache
 from langchain.cache import SQLiteCache
+from langchain_core.embeddings import Embeddings
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import AzureOpenAIEmbeddings
 
 logger : logging.Logger = logging.getLogger()
 
@@ -93,8 +96,8 @@ class LLMBaseCore:
         
         if self.openai_api_type == 'azure':
             return AzureChatOpenAI(
-                azure_deployment   = self.openai_api_deployment,
-                model_name     = model_name,
+                deployment_name= self.openai_api_deployment,
+                model          = model_name,
                 max_tokens     = max_tokens,
                 temperature    = 0,
                 verbose        = False,
@@ -106,6 +109,20 @@ class LLMBaseCore:
             )
         
         logger.error(f'create_llm: unsupported OPENAI_API_TYPE: {self.openai_api_type}')
+        return None
+
+    def create_openai_embeddings(self) -> Embeddings:
+        """
+            Create OpenAI Embeddings
+        """
+
+        if self.openai_api_type == 'openai':
+            return OpenAIEmbeddings()
+        
+        if self.openai_api_type == 'azure':
+            return AzureOpenAIEmbeddings()
+        
+        logger.error(f'create_openai_embeddings: unsupported OPENAI_API_TYPE: {self.openai_api_type}')
         return None
 
     def extract_llm_xml_string(self, sql_xml : str) -> str:

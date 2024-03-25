@@ -5,7 +5,6 @@
 DISCLAIMER = """
 It's PoC:
 - Do not upload documents with personal or sensitive information
-- Data is not stored on the disk and removed after session (close browser or refresh page)
 """
 
 QUERY_EXPLANATION = """
