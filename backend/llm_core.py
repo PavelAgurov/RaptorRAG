@@ -9,15 +9,15 @@ from typing import Any
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.callbacks import get_openai_callback
-from langchain_community.document_loaders import UnstructuredFileLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import UnstructuredFileLoader, UnstructuredMarkdownLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter, TokenTextSplitter, MarkdownTextSplitter
 from langchain_core.embeddings import Embeddings
 from langchain.storage import LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.runnables import RunnablePassthrough
-from langchain_text_splitters import TokenTextSplitter
 from langchain_openai import ChatOpenAI
+from chromadb.config import Settings as ChromadbSettings
 
 from backend.llm_base_core import LLMBaseCore
 from backend import prompts
@@ -83,8 +83,41 @@ class LLMCore(LLMBaseCore):
             Parse documents
         """
         
-        loader = UnstructuredFileLoader(document_names)
-        docs = loader.load()
+        md_doc_names = [f for f in document_names if f.lower().endswith('.md')]
+        md_doc_chunks = self.__get_md_chunks(md_doc_names)
+        
+        another_doc_names = [f for f in document_names if f not in md_doc_names]
+        another_chunks = self.__get_unstructured_chunks(another_doc_names)
+        
+        return md_doc_chunks + another_chunks
+
+    def __get_md_chunks(self, doc_names : list[str]) -> list[str]:
+        """
+            Parse Markdown documents and return chunks
+        """
+        if len(doc_names) == 0:
+            return []
+        
+        logger.error(doc_names)
+        
+        document_list = []
+        for doc_name in doc_names:
+            doc_loader = UnstructuredMarkdownLoader(doc_name)
+            docs = doc_loader.load()
+            document_list.extend(docs)
+            
+        markdown_splitter = MarkdownTextSplitter()
+        return [d.page_content for d in markdown_splitter.split_documents(document_list)]
+        
+    def __get_unstructured_chunks(self, doc_names : list[str]) -> list[str]:
+        """
+            Parse unstructured documents and return chunks
+        """
+        if len(doc_names) == 0:
+            return []
+        
+        doc_loader = UnstructuredFileLoader(doc_names)
+        docs = doc_loader.load()
         
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size      = self.__chunk_size,
@@ -95,9 +128,7 @@ class LLMCore(LLMBaseCore):
             length_function = len,
             is_separator_regex=False,
         )
-
-        chunks = [d.page_content for d in text_splitter.split_documents(docs)]
-        return chunks
+        return [d.page_content for d in text_splitter.split_documents(docs)]
 
     def embedding_text(self, text : str) -> list[float]:
         """
@@ -136,8 +167,28 @@ class LLMCore(LLMBaseCore):
             tmp.delete_collection()
         except:  # pylint: disable=W0702
             pass
-        self.__vector_store = Chroma.from_texts(texts=texts, persist_directory=".chroma", embedding= self.__embedding_model, collection_name= collection_name)
+        self.__vector_store = Chroma.from_texts(
+            texts=texts, 
+            persist_directory=".chroma", 
+            embedding= self.__embedding_model, 
+            collection_name= collection_name,
+            client_settings = ChromadbSettings(anonymized_telemetry=False)
+        )
         self.__vector_store.persist()
+
+
+    def vectordb_get_collection_size(self, collection_name : str) -> str:
+        """
+            Return size of selected collection
+        """
+        if not self.__vector_store:
+            self.__vector_store = Chroma(
+                persist_directory=".chroma", 
+                embedding_function= self.__embedding_model, 
+                collection_name= collection_name,
+                client_settings = ChromadbSettings(anonymized_telemetry=False)
+            )
+        return self.__vector_store._collection.count() # pylint: disable=W01212
 
     def query(self, query : str, collection_name : str) -> tuple[str, int]:
         """
@@ -145,7 +196,12 @@ class LLMCore(LLMBaseCore):
         """
 
         if not self.__vector_store:
-            self.__vector_store = Chroma(persist_directory=".chroma", embedding_function= self.__embedding_model, collection_name= collection_name)
+            self.__vector_store = Chroma(
+                persist_directory=".chroma", 
+                embedding_function= self.__embedding_model, 
+                collection_name= collection_name,
+                client_settings = ChromadbSettings(anonymized_telemetry=False)
+            )
             
         retriever = self.__vector_store.as_retriever(
             search_type = "similarity_score_threshold",

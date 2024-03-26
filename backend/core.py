@@ -12,6 +12,7 @@ import json
 from enum import Enum
 
 from backend.llm_core import LLMCore
+from backend import documents_utils
 from backend import clustering
 from utils import file_utils
 
@@ -74,13 +75,7 @@ class Core:
 
         # store documents in tmp files
         report_progress(10, "Store documents...")
-        full_document_names = []
-        for document_name, document_content in zip(document_names, document_contents):
-            full_document_name = os.path.join(self.__DOWNLOAD_FOLDER, document_name)
-            logger.info(f"Store document {document_name} to {full_document_name}")
-            with open(full_document_name, 'wb') as f:
-                f.write(document_content)
-            full_document_names.append(full_document_name)
+        full_document_names = documents_utils.save_documents(self.__DOWNLOAD_FOLDER, document_names, document_contents)
         report_progress(11, f"Stored {len(full_document_names)} documents")
         
         report_progress(20, "Create LLM...")

@@ -51,8 +51,8 @@ tabExtraction, tabTemplate, tabSettings = st.tabs(["Extraction", "Template", "Se
 with tabExtraction:
     with st.form("my-form", clear_on_submit=True, border=True):
         uploaded_files = st.file_uploader(
-            "Drag your documents here (docx)",
-            type=["docx"],
+            "Drag your documents here (docx, md)",
+            type=["docx", "md"],
             accept_multiple_files= True
         )
         submitted_uploaded_files = st.form_submit_button("Upload selected documents")
